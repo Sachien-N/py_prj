@@ -1,0 +1,15 @@
+# Neumorphism theme - Person C (Hariharan S, 23MID0182)
+# Single-tone grey canvas + amber accent; full soft-UI styling in ui/theme.py.
+[theme]
+primaryColor = "#d97706"
+backgroundColor = "#e4ebf5"
+secondaryBackgroundColor = "#e4ebf5"
+textColor = "#334155"
+font = "sans serif"
+
+[server]
+headless = true
+runOnSave = true
+
+[browser]
+gatherUsageStats = false
