@@ -1,0 +1,981 @@
+================================================================================
+ THREE INDEPENDENT PYTHON PROJECTS
+ CROSS-MACHINE RUN GUIDE
+ Person A: Windows | Person B: macOS | Person C: macOS
+================================================================================
+
+STATUS: All three projects are implemented and tested.
+
+Owners:
+  Person A: Sachien N      Registration No. 23MID0255
+  Person B: Shravan N A    Registration No. 23MID0445
+  Person C: HARIHARAN S    Registration No. 23MID0182
+
+This guide explains how to run the three applications on three different
+computers on the same local network (LAN) or the same private VPN:
+
+  Windows computer  -> Person A: Smart Expense Categorization and Budget Manager
+  Mac computer 1    -> Person B: Smart Subscription Manager
+  Mac computer 2    -> Person C: Smart Home Electricity Monitoring and
+                                  TNEB Bill Verification System
+
+Each person runs only their own folder. Each folder contains its own FastAPI
+backend, Streamlit dashboard, SQLite database, configuration, tests and README.
+The applications communicate only through authenticated JSON over HTTP.
+
+Important:
+  - Do NOT use run_all.py for this three-computer arrangement. run_all.py is a
+    single-machine convenience launcher.
+  - Do NOT share database files between computers.
+  - Do NOT expose these development services directly to the public Internet.
+  - Run all three computers on the same trusted LAN or private VPN.
+  - A and B/C must be able to reach each other over TCP; the standard local
+    ports are used below.
+
+
+================================================================================
+0. QUICK TOPOLOGY
+================================================================================
+
+  +------------------------------------------------------+
+  | WINDOWS - PERSON A                                   |
+  | API:        http://<WINDOWS_A_IP>:8001               |
+  | Dashboard:  http://127.0.0.1:8501 (on the PC)        |
+  | Database:   person_a_sachien_n_23MID0255/data/person_a.db |
+  +------------------------------------------------------+
+        ^                                  ^
+        | B push (X-API-Key)               | C push (X-API-Key)
+        |                                  |
+  +-----------------------------+    +-----------------------------+
+  | MAC 1 - PERSON B            |    | MAC 2 - PERSON C            |
+  | API: http://<MAC_B_IP>:8002 |    | API: http://<MAC_C_IP>:8003 |
+  | UI:  http://127.0.0.1:8502  |    | UI:  http://127.0.0.1:8503  |
+  | DB:  data/person_b.db       |    | DB:  data/person_c.db       |
+  +-----------------------------+    +-----------------------------+
+
+Primary data flow:
+  Person B --POST /integrations/subscriptions/sync--> Person A
+  Person C --POST /integrations/electricity/sync----> Person A
+
+Optional reverse flow:
+  Person A can pull from Person B/C if their APIs are reachable and the A .env
+  URLs are configured. The normal/push flow is enough for the demonstration.
+
+Before starting, write down the actual IP addresses:
+
+  WINDOWS_A_IP = __________________  (example 192.168.1.50)
+  MAC_B_IP     = __________________  (example 192.168.1.61)
+  MAC_C_IP     = __________________  (example 192.168.1.62)
+
+Use IP addresses in the .env files, NOT "localhost", when one computer connects
+to another computer. "localhost" always means the same machine.
+
+Replace every <PLACEHOLDER> in this guide, including the angle brackets, with
+your real IP address, key, or path.
+
+
+================================================================================
+1. WHAT EACH PERSON NEEDS
+================================================================================
+
+Person A (Windows):
+  - Python 3.11 or newer (Python 3.13 is fine).
+  - The folder: person_a_sachien_n_23MID0255
+  - Two PowerShell terminals (one API, one dashboard).
+  - Windows Firewall permission for inbound TCP port 8001.
+
+Person B (macOS):
+  - Python 3.11 or newer. Check with: python3 --version
+  - The folder: person_b_shravan_n_a_23MID0445
+  - Two Terminal windows (one API, one dashboard).
+  - Incoming TCP port 8002 allowed only if Person A will use the optional pull
+    feature. B's normal push to A only needs outgoing access.
+
+Person C (macOS):
+  - Python 3.11 or newer. Check with: python3 --version
+  - The folder: person_c_hariharan_s_23MID0182
+  - Two Terminal windows (one API, one dashboard).
+  - Incoming TCP port 8003 allowed only if Person A will use the optional pull
+    feature.
+
+All computers must be on the same Wi-Fi/LAN or the same private VPN such as
+Tailscale. They should be able to ping each other.
+
+Do not copy a .venv folder between operating systems. Create a fresh virtual
+environment on each computer.
+
+Do not copy a live SQLite database while its API is running. For a completely
+fresh start, do not copy the data/*.db files; they will be created automatically.
+
+
+================================================================================
+2. COPY THE CORRECT FOLDER TO EACH COMPUTER
+================================================================================
+
+From the delivered project folder, give each person only their own project folder:
+
+  Windows A: person_a_sachien_n_23MID0255
+  Mac B:     person_b_shravan_n_a_23MID0445
+  Mac C:     person_c_hariharan_s_23MID0182
+
+A simple way is to ZIP each folder separately (do not include .venv, __pycache__,
+or a live database), then transfer the ZIP file.
+
+Windows example destination:
+  C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+
+Mac example destination:
+  ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+  ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+
+Each project folder already includes:
+  api.py, app.py, models.py, schemas.py, services/, ui/, tests/,
+  requirements.txt, .env.example, README.md
+
+If you also copy the demonstration database, the dashboards will open with
+example data. To start empty, remove data/person_a.db, data/person_b.db, or
+data/person_c.db before first API start (with that project's API stopped).
+
+
+================================================================================
+3. CREATE THE TWO SHARED INTEGRATION KEYS
+================================================================================
+
+Create two separate random keys:
+  B_KEY = used only for Person B -> Person A
+  C_KEY = used only for Person C -> Person A
+
+Generate a key on Windows PowerShell:
+
+  python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+Generate a key on macOS Terminal:
+
+  python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+
+Run the command twice so B and C have different keys.
+
+Write them down:
+
+  B_KEY = __________________________________________________
+  C_KEY = __________________________________________________
+
+These values must match EXACTLY on the corresponding two systems:
+
+  Person A: PERSON_B_SYNC_API_KEY  ==  Person B: PERSON_A_SYNC_API_KEY
+  Person A: PERSON_C_SYNC_API_KEY  ==  Person C: PERSON_A_SYNC_API_KEY
+
+Do not put these keys in an email or public chat. Do not add them to source code.
+They belong only in each project's local .env file.
+
+
+================================================================================
+4. WINDOWS - PERSON A SETUP AND RUN
+================================================================================
+
+Open PowerShell.
+
+4.1 Go to the Person A folder
+
+  cd C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+
+Adjust the path to where the folder actually is.
+
+4.2 Check Python
+
+  python --version
+  py --version
+
+Use Python 3.11 or newer. If "python" is not recognized, use "py" instead of
+"python" in the remaining commands, or install Python from https://python.org.
+
+4.3 Create and activate the virtual environment
+
+  python -m venv .venv
+  .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation with an execution-policy message, run this once
+for your user account:
+
+  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Then activate again.
+
+4.4 Install dependencies
+
+  python -m pip install --upgrade pip
+  python -m pip install -r requirements.txt
+
+Pinned packages include FastAPI, Uvicorn, SQLAlchemy, Pydantic, Streamlit,
+Requests, pandas, NumPy, Plotly, python-dotenv, python-multipart and pytest.
+
+4.5 Create the environment file
+
+  Copy-Item .env.example .env
+  notepad .env
+
+Replace its contents with the following. Replace the example IPs and keys.
+
+  DATABASE_URL=sqlite:///./data/person_a.db
+  API_HOST=0.0.0.0
+  API_PORT=8001
+  API_BASE_URL=http://127.0.0.1:8001
+  PERSON_B_API_URL=http://<MAC_B_IP>:8002
+  PERSON_C_API_URL=http://<MAC_C_IP>:8003
+  PERSON_B_SYNC_API_KEY=<PASTE_B_KEY_HERE>
+  PERSON_C_SYNC_API_KEY=<PASTE_C_KEY_HERE>
+  INTEGRATION_TIMEOUT_SECONDS=5
+  INTEGRATION_RETRIES=2
+  CORS_ORIGINS=http://127.0.0.1:8501,http://localhost:8501
+
+Notes:
+  - API_BASE_URL stays 127.0.0.1 because the Windows dashboard talks to the
+    Person A API on the same Windows computer.
+  - PERSON_B_API_URL and PERSON_C_API_URL use the Mac IP addresses; they are
+    needed only for the optional A-pull buttons.
+  - No spaces around "=".
+  - Do not wrap values in quotes.
+
+4.6 Allow Person A API through Windows Firewall
+
+Open PowerShell as Administrator and run:
+
+  New-NetFirewallRule -DisplayName "Person A API 8001" -Direction Inbound -Protocol TCP -LocalPort 8001 -Action Allow -RemoteAddress LocalSubnet
+
+"LocalSubnet" limits access to the local network. If this rule already exists,
+skip it. Do not create a public Internet port-forward for port 8001.
+
+If Windows asks whether the network is Public or Private, choose Private for a
+trusted home/college LAN.
+
+4.6b If TCP port 8001 is already used by an unrelated application
+
+Do not kill a process you do not recognize. Choose another port for Person A,
+for example 8011. Then you must change ALL of the following consistently:
+
+  - Start the A API with: --port 8011
+  - Open the firewall for TCP 8011 instead of 8001.
+  - In Person A .env: API_BASE_URL=http://127.0.0.1:8011
+  - In Person B .env: PERSON_A_API_URL=http://<WINDOWS_A_IP>:8011
+  - In Person C .env: PERSON_A_API_URL=http://<WINDOWS_A_IP>:8011
+  - A API docs: http://127.0.0.1:8011/docs
+
+The same idea applies if B's 8002 or C's 8003 is taken: choose another port and
+update the corresponding URL in Person A's .env (for optional pulls) and in the
+affected project's API_BASE_URL.
+
+4.7 Find the Windows computer's LAN IP address
+
+  ipconfig
+
+Under the active Wi-Fi or Ethernet adapter, note the "IPv4 Address",
+for example 192.168.1.50. This is WINDOWS_A_IP.
+
+Test locally:
+
+  Invoke-RestMethod http://127.0.0.1:8001/health
+
+(That works after the API is started in the next step.)
+
+4.8 Start the Person A API (Terminal 1)
+
+  cd C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+  .\.venv\Scripts\Activate.ps1
+  python -m uvicorn api:app --host 0.0.0.0 --port 8001
+
+Keep this terminal open. The important part is --host 0.0.0.0: it allows the two
+Mac computers to connect. With 127.0.0.1 only, remote computers cannot connect.
+
+You should see "Uvicorn running on http://0.0.0.0:8001".
+
+Local checks:
+  http://127.0.0.1:8001/health
+  http://127.0.0.1:8001/docs
+
+4.9 Start the Person A dashboard (Terminal 2)
+
+Open a second PowerShell window:
+
+  cd C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+  .\.venv\Scripts\Activate.ps1
+  python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8501
+
+Open on the Windows computer:
+  http://127.0.0.1:8501
+
+The dashboard shows Person A owner "Sachien N" and registration "23MID0255".
+
+To stop either service, press Ctrl+C in its terminal.
+
+4.10 Optional: access Person A API from another computer
+
+From Mac B or C:
+
+  curl -s http://<WINDOWS_A_IP>:8001/health
+
+Expected JSON includes:
+  "status": "ok"
+  "service": "person_a_sachien_n_23MID0255"
+  "owner": "Sachien N"
+  "registration_no": "23MID0255"
+
+
+================================================================================
+5. MAC 1 - PERSON B SETUP AND RUN
+================================================================================
+
+Open Terminal.
+
+5.1 Go to the Person B folder
+
+  cd ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+
+Adjust the path to your actual location.
+
+5.2 Check Python
+
+  python3 --version
+
+Use Python 3.11 or newer. If needed, install Python from python.org or Homebrew:
+
+  brew install python
+
+5.3 Create and activate a virtual environment
+
+  python3 -m venv .venv
+  source .venv/bin/activate
+
+Your prompt should now begin with (.venv).
+
+5.4 Install dependencies
+
+  python -m pip install --upgrade pip
+  python -m pip install -r requirements.txt
+
+5.5 Create the environment file
+
+  cp .env.example .env
+  nano .env
+
+Replace its contents with:
+
+  DATABASE_URL=sqlite:///./data/person_b.db
+  API_HOST=0.0.0.0
+  API_PORT=8002
+  API_BASE_URL=http://127.0.0.1:8002
+  PERSON_A_API_URL=http://<WINDOWS_A_IP>:8001
+  PERSON_A_SYNC_API_KEY=<PASTE_B_KEY_HERE>
+  INTEGRATION_TIMEOUT_SECONDS=5
+  INTEGRATION_RETRIES=2
+  UPCOMING_DAYS=30
+  CORS_ORIGINS=http://127.0.0.1:8502,http://localhost:8502
+
+Important:
+  - PERSON_A_API_URL must use the Windows LAN IP, not 127.0.0.1.
+  - PERSON_A_SYNC_API_KEY must exactly match Person A's
+    PERSON_B_SYNC_API_KEY.
+  - API_BASE_URL stays 127.0.0.1 because the Mac B dashboard talks to the Mac B
+    API locally.
+
+Save in nano with Ctrl+O, Enter, then Ctrl+X.
+
+5.6 Allow incoming connections if needed
+
+macOS may show a firewall prompt such as:
+  "Do you want the application python to accept incoming network connections?"
+
+If Person A will use the optional pull feature, click Allow. If you only use
+B's push to A, incoming access is not required.
+
+To check the setting:
+  System Settings > Network > Firewall > Options
+Allow Python if necessary. Do not disable the firewall completely.
+
+5.7 Find Mac B's LAN IP address
+
+  ipconfig getifaddr en0
+
+If that prints nothing, try:
+
+  ipconfig getifaddr en1
+
+The result is MAC_B_IP (for example 192.168.1.61). Use the same network as
+Person A.
+
+Test connectivity to Person A:
+
+  ping -c 3 <WINDOWS_A_IP>
+  curl -s http://<WINDOWS_A_IP>:8001/health
+
+If curl fails, fix the network/firewall before starting integration work.
+
+5.8 Start the Person B API (Terminal 1)
+
+  cd ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+  source .venv/bin/activate
+  python -m uvicorn api:app --host 0.0.0.0 --port 8002
+
+Local checks:
+  http://127.0.0.1:8002/health
+  http://127.0.0.1:8002/docs
+
+5.9 Start the Person B dashboard (Terminal 2)
+
+Open a second Terminal window:
+
+  cd ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+  source .venv/bin/activate
+  python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
+
+Open on Mac B:
+  http://127.0.0.1:8502
+
+The dashboard shows Person B owner "Shravan N A" and registration "23MID0445".
+
+5.10 Add demonstration data
+
+In the Person B dashboard:
+  1. Open "Subscriptions".
+  2. Add a subscription, for example Netflix, Entertainment, 499 INR,
+     monthly, status active.
+  3. Open "Payments" and optionally record an actual payment for the current
+     month.
+  4. Open "Renewals" and click "Refresh reminders" if desired.
+
+Keep the B API terminal running. Person B works fully even if Person A is
+offline.
+
+
+================================================================================
+6. MAC 2 - PERSON C SETUP AND RUN
+================================================================================
+
+Open Terminal.
+
+6.1 Go to the Person C folder
+
+  cd ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+
+6.2 Check Python and create the environment
+
+  python3 --version
+  python3 -m venv .venv
+  source .venv/bin/activate
+  python -m pip install --upgrade pip
+  python -m pip install -r requirements.txt
+
+6.3 Create the environment file
+
+  cp .env.example .env
+  nano .env
+
+Replace its contents with:
+
+  DATABASE_URL=sqlite:///./data/person_c.db
+  API_HOST=0.0.0.0
+  API_PORT=8003
+  API_BASE_URL=http://127.0.0.1:8003
+  TIMEZONE=Asia/Kolkata
+  PERSON_A_API_URL=http://<WINDOWS_A_IP>:8001
+  PERSON_A_SYNC_API_KEY=<PASTE_C_KEY_HERE>
+  INTEGRATION_TIMEOUT_SECONDS=5
+  INTEGRATION_RETRIES=2
+  DISCREPANCY_TOLERANCE_PERCENT=10
+  MAX_READING_GAP_HOURS=4
+  CORS_ORIGINS=http://127.0.0.1:8503,http://localhost:8503
+
+Important:
+  - PERSON_A_API_URL uses the Windows LAN IP.
+  - PERSON_A_SYNC_API_KEY must exactly match Person A's
+    PERSON_C_SYNC_API_KEY.
+  - C uses its own key, different from B's key.
+  - TIMEZONE should match the household/billing timezone. Asia/Kolkata is set
+    for this TNEB-oriented project.
+
+Save in nano with Ctrl+O, Enter, then Ctrl+X.
+
+6.4 Allow incoming connections if needed
+
+If macOS asks whether Python may accept incoming connections and Person A will
+use the optional pull feature, click Allow. If you only use C's push to A,
+incoming access is not required.
+
+6.5 Find Mac C's LAN IP address
+
+  ipconfig getifaddr en0
+
+If empty, try en1. The result is MAC_C_IP.
+
+Test connectivity to Person A:
+
+  ping -c 3 <WINDOWS_A_IP>
+  curl -s http://<WINDOWS_A_IP>:8001/health
+
+6.6 Start the Person C API (Terminal 1)
+
+  cd ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+  source .venv/bin/activate
+  python -m uvicorn api:app --host 0.0.0.0 --port 8003
+
+Local checks:
+  http://127.0.0.1:8003/health
+  http://127.0.0.1:8003/docs
+
+6.7 Start the Person C dashboard (Terminal 2)
+
+Open a second Terminal window:
+
+  cd ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+  source .venv/bin/activate
+  python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8503
+
+Open on Mac C:
+  http://127.0.0.1:8503
+
+The dashboard shows Person C owner "HARIHARAN S" and registration "23MID0182".
+
+6.8 Create demonstration data
+
+Option 1, from the Person C dashboard:
+  Integrations > Simulated demonstration data > Generate demo data.
+  All generated sockets, readings and bills are visibly labelled simulated.
+
+Option 2, from a Person C terminal (API can be stopped or running, but stopping
+the API during direct DB seeding avoids concurrent writes):
+  source .venv/bin/activate
+  python seed_demo.py --months 6 --force
+
+The seeded tariff is an illustrative demonstration tariff. It is NOT an
+official TNEB/TANGEDCO tariff. Do not treat its estimates as official bill data.
+
+
+================================================================================
+7. VERIFY CONNECTIVITY BETWEEN ALL THREE SYSTEMS
+================================================================================
+
+Run each check from the computer and in the order shown.
+
+7.1 Local service checks
+
+On Windows A:
+  Invoke-RestMethod http://127.0.0.1:8001/health
+
+On Mac B:
+  curl -s http://127.0.0.1:8002/health
+
+On Mac C:
+  curl -s http://127.0.0.1:8003/health
+
+Each should return JSON with "status": "ok".
+
+7.2 Cross-machine check from Mac B
+
+  curl -s http://<WINDOWS_A_IP>:8001/health
+
+7.3 Cross-machine check from Mac C
+
+  curl -s http://<WINDOWS_A_IP>:8001/health
+
+7.4 Cross-machine check from Windows A
+
+  Invoke-RestMethod http://<MAC_B_IP>:8002/health
+  Invoke-RestMethod http://<MAC_C_IP>:8003/health
+
+If these fail:
+  - Confirm APIs were started with --host 0.0.0.0, not 127.0.0.1.
+  - Confirm all computers are on the same network.
+  - Confirm the Windows inbound firewall rule for 8001 exists.
+  - On macOS, confirm Python is allowed through the firewall if A pulls from B/C.
+  - Confirm the IP addresses in the .env files are current.
+  - Disable any VPN temporarily for testing, or ensure the VPN allows LAN traffic.
+
+
+================================================================================
+8. RUN THE TWO INTEGRATIONS
+================================================================================
+
+8.1 Person B -> Person A
+
+On Mac B, after adding at least one active subscription:
+  1. Open the Person B dashboard: http://127.0.0.1:8502
+  2. Go to "Integrations".
+  3. Click "Sync now" for the current billing period.
+  4. A success message should say Person A accepted the records.
+
+Equivalent command from Mac B:
+
+  curl -X POST "http://127.0.0.1:8002/integrations/person-a/sync" \
+       -H "X-API-Key: <PASTE_B_KEY_HERE>"
+
+The B API forwards the payload to:
+
+  POST http://<WINDOWS_A_IP>:8001/integrations/subscriptions/sync
+  Header: X-API-Key: <B_KEY>
+
+What A receives:
+  - Source application: person_b
+  - One record per active subscription and current period
+  - Stable external IDs such as: sub:1:2026-10
+  - is_estimate=true if this is the expected recurring cost
+  - is_estimate=false if an actual payment was recorded for that period
+
+8.2 Person C -> Person A
+
+On Mac C:
+  1. Open http://127.0.0.1:8503
+  2. Go to "Integrations".
+  3. Choose the expense period if desired.
+  4. Click "Push electricity expenses to Person A".
+  5. A success message should show the number of records accepted.
+
+Equivalent command from Mac C:
+
+  curl -X POST "http://127.0.0.1:8003/integrations/person-a/sync" \
+       -H "X-API-Key: <PASTE_C_KEY_HERE>"
+
+Optional explicit date range:
+
+  curl -X POST "http://127.0.0.1:8003/integrations/person-a/sync?start_date=2026-04-01&end_date=2026-10-31" \
+       -H "X-API-Key: <PASTE_C_KEY_HERE>"
+
+The C API sends monthly records to:
+
+  POST http://<WINDOWS_A_IP>:8001/integrations/electricity/sync
+  Header: X-API-Key: <C_KEY>
+
+What A receives:
+  - Source application: person_c
+  - Stable external IDs such as: electricity:2026-09
+  - Actual bill amount where a bill was recorded
+  - Otherwise a clearly marked configured-tariff estimate
+  - Data coverage percentage and units
+
+8.3 Verify Person A imports
+
+On Windows A:
+  1. Open http://127.0.0.1:8501.
+  2. Open "Integrations" and click "Refresh"/"Check live connectivity".
+  3. Confirm Person B and Person C show success and a last-success timestamp.
+  4. Open "Expenses" and filter Source = person_b, then person_c.
+  5. Confirm that imported rows show the correct source and estimated flag.
+  6. Imported rows are read-only in Person A; correct them at their source.
+
+Command-line checks on Windows A:
+
+  Invoke-RestMethod "http://127.0.0.1:8001/expenses?source_app=person_b"
+  Invoke-RestMethod "http://127.0.0.1:8001/expenses?source_app=person_c"
+  Invoke-RestMethod "http://127.0.0.1:8001/integrations/status"
+
+8.4 Test duplicate prevention
+
+Click "Sync now" twice in Person B or "Push electricity expenses" twice in
+Person C. Person A must update the existing external records, not create
+duplicate rows.
+
+The deduplication key is:
+  UNIQUE(source_app, external_id)
+
+Examples:
+  person_b + sub:1:2026-10
+  person_c + electricity:2026-09
+
+8.5 Test the offline behaviour
+
+  1. Stop Person A's API with Ctrl+C on Windows.
+  2. In Person B/C, click sync.
+  3. The sender should report HTTP 503/failure, and its local subscription or
+     electricity data must remain intact.
+  4. Restart Person A's API.
+  5. Click sync again. It should succeed.
+
+No placeholder or fabricated external data is written when a service is
+unavailable.
+
+8.6 Optional: Person A pulls from B/C
+
+The primary flow is B/C push. If you want the A "Sync subscriptions" and
+"Sync electricity" buttons to pull from the Macs:
+  - B/C APIs must be started with --host 0.0.0.0.
+  - A's .env PERSON_B_API_URL / PERSON_C_API_URL must contain the Mac IPs.
+  - macOS firewall must allow incoming TCP 8002/8003.
+  - A's PERSON_B_SYNC_API_KEY / PERSON_C_SYNC_API_KEY must match B/C keys.
+
+If those conditions are not met, A shows a safe failure message; use the push
+buttons on B and C instead.
+
+
+================================================================================
+9. RUN THE TESTS ON EACH SYSTEM
+================================================================================
+
+Each project has its own tests and its own temporary test database.
+
+Person A on Windows PowerShell:
+
+  cd C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+  .\.venv\Scripts\Activate.ps1
+  python -m pytest -q
+
+Expected: 16 passed.
+
+Person B on Mac 1:
+
+  cd ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+  source .venv/bin/activate
+  python -m pytest -q
+
+Expected: 13 passed.
+
+Person C on Mac 2:
+
+  cd ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+  source .venv/bin/activate
+  python -m pytest -q
+
+Expected: 16 passed.
+
+These results were verified in the development environment.
+
+Do NOT run the root integration_tests folder across three separate computers as
+a single pytest run. That suite starts all six test services inside one machine
+on temporary ports. For this three-computer deployment, perform the manual
+cross-machine checks in Section 8. The root integration suite remains useful on
+one development machine and passed 9 tests there.
+
+Tests use temporary SQLite files; they do not erase the demonstration databases.
+
+
+================================================================================
+10. OPERATING NOTES
+================================================================================
+
+10.1 Start order
+
+  1. Start Person A API.
+  2. Start Person A dashboard.
+  3. Start Person B API and dashboard.
+  4. Start Person C API and dashboard.
+  5. Verify health checks.
+  6. Add local data.
+  7. Push/sync to A.
+
+10.2 Stop order
+
+  Ctrl+C in each terminal. Stop the dashboards first if desired, then the APIs.
+  All data is committed to each project's own SQLite database.
+
+10.3 IP address changes
+
+If DHCP gives a computer a different IP:
+  - Update PERSON_A_API_URL in B/C .env.
+  - Update PERSON_B_API_URL / PERSON_C_API_URL in A .env.
+  - Restart the affected APIs (the .env is read at startup).
+Set a DHCP reservation/static address for each machine to avoid this.
+
+10.4 Data reset
+
+With the relevant API stopped:
+  Windows:
+    Remove-Item .\data\person_a.db
+  Mac:
+    rm data/person_b.db
+    rm data/person_c.db
+
+The database is recreated on the next API start. The Person C tariff demo is
+reseeding automatically; the other demo data is not recreated automatically.
+
+10.5 Demonstration data
+
+Person A and B: add data through their dashboards.
+Person C: use Integrations > simulated demo data, or:
+  python seed_demo.py --months 6 --force
+
+Every simulated electricity record is labelled. The seeded tariff is NOT an
+official TNEB tariff.
+
+10.6 API documentation
+
+On each local machine:
+  Person A: http://127.0.0.1:8001/docs
+  Person B: http://127.0.0.1:8002/docs
+  Person C: http://127.0.0.1:8003/docs
+
+From another computer, replace 127.0.0.1 with that computer's LAN IP if its API
+is intentionally reachable on the network.
+
+
+================================================================================
+11. TROUBLESHOOTING
+================================================================================
+
+Problem: "Connection refused" from another computer.
+Fix:
+  - Is the API running?
+  - Was it started with --host 0.0.0.0, not --host 127.0.0.1?
+  - Is the correct IP address in .env?
+  - Is the Windows firewall rule allowing TCP 8001?
+  - Are both computers on the same LAN/VPN?
+
+Problem: curl hangs/times out.
+Fix:
+  - Test localhost first on the server computer.
+  - Check firewall and Wi-Fi isolation ("client isolation" on some routers).
+  - Ensure no VPN route conflict.
+  - Ping the target IP.
+
+Problem: HTTP 401 from an integration.
+Fix:
+  - The X-API-Key value does not match.
+  - Person A's PERSON_B_SYNC_API_KEY must equal Person B's
+    PERSON_A_SYNC_API_KEY.
+  - Person A's PERSON_C_SYNC_API_KEY must equal Person C's
+    PERSON_A_SYNC_API_KEY.
+  - Restart the API after editing .env.
+
+Problem: HTTP 503.
+Fix:
+  - The destination API is offline or timed out.
+  - Start Person A and retry.
+  - Local data is preserved; no need to re-enter it.
+
+Problem: Person A can push from B/C but the A "pull" buttons fail.
+Fix:
+  - That is expected when B/C APIs are local-only.
+  - Either use B/C push (recommended), or bind B/C APIs to 0.0.0.0 and allow
+    ports 8002/8003 through the Mac firewall.
+
+Problem: Dashboard says API offline.
+Fix:
+  - Start that project's API.
+  - Confirm API_BASE_URL in that project's .env is http://127.0.0.1:<port>.
+  - Refresh the browser.
+
+Problem: Person C comparison says no usable readings.
+Fix:
+  - Add at least two readings with an interval no longer than
+    MAX_READING_GAP_HOURS (default 4).
+  - Check the reading times are within the billing period.
+  - Data coverage is shown; gaps are not filled with invented energy.
+
+Problem: Person C says no active tariff.
+Fix:
+  - Add/activate a tariff configuration effective on the bill's end date.
+  - Verify the tariff's slabs and effective dates.
+  - Remember that the bundled tariff is only an illustrative demo.
+
+Problem: macOS blocks Python.
+Fix:
+  - System Settings > Network > Firewall > Options > allow Python.
+  - If you do not need A-pull, you can keep B/C APIs bound to 127.0.0.1 and use
+    push only.
+
+Problem: Port already in use.
+  Windows:
+    Get-NetTCPConnection -LocalPort 8001
+    Stop the owning process only if you know it is the old API.
+  macOS:
+    lsof -nP -iTCP:8002 -sTCP:LISTEN
+    Stop the owning process only if you know it is the old API.
+
+Problem: PowerShell cannot activate .venv.
+  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Problem: Python command not found on Mac.
+  Use python3, or install Python 3.11+ and use python3 -m venv .venv.
+
+Problem: Wrong database state.
+  Stop the API, back up or delete the relevant data/*.db file, and restart.
+  Never point two projects at the same SQLite file.
+
+
+================================================================================
+12. SECURITY RULES FOR THIS DEPLOYMENT
+================================================================================
+
+1. Use only a trusted LAN or a private VPN. Do not forward ports 8001/8002/8003
+   from your Internet router.
+2. Use two strong, different integration keys. The sample "dev-..." keys in
+   .env.example are for local development only.
+3. Keep .env files local. Never commit them.
+4. The integration sync endpoints are authenticated. Core CRUD/read APIs are not
+   user-authenticated, so do not expose the APIs to the public Internet.
+5. There is no user login in the dashboards. This is a single-user academic
+   project, not a multi-tenant service.
+6. Person C's tariff data must be verified independently against an official
+   TNEB/TANGEDCO tariff order before any real bill decision.
+7. Person C never asserts that a utility bill is incorrect. The analysis reports
+   observed facts, potential explanations and missing data only.
+8. Person B never claims an actual payment was processed automatically. Actual
+   payments are manually recorded facts.
+
+
+================================================================================
+13. QUICK COMMAND SUMMARY
+================================================================================
+
+WINDOWS A - Terminal 1 (API):
+  cd C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+  .\.venv\Scripts\Activate.ps1
+  python -m uvicorn api:app --host 0.0.0.0 --port 8001
+
+WINDOWS A - Terminal 2 (dashboard):
+  cd C:\Projects\Three_Person_Python_Projects\person_a_sachien_n_23MID0255
+  .\.venv\Scripts\Activate.ps1
+  python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8501
+
+MAC B - Terminal 1 (API):
+  cd ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+  source .venv/bin/activate
+  python -m uvicorn api:app --host 0.0.0.0 --port 8002
+
+MAC B - Terminal 2 (dashboard):
+  cd ~/Projects/Three_Person_Python_Projects/person_b_shravan_n_a_23MID0445
+  source .venv/bin/activate
+  python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
+
+MAC C - Terminal 1 (API):
+  cd ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+  source .venv/bin/activate
+  python -m uvicorn api:app --host 0.0.0.0 --port 8003
+
+MAC C - Terminal 2 (dashboard):
+  cd ~/Projects/Three_Person_Python_Projects/person_c_hariharan_s_23MID0182
+  source .venv/bin/activate
+  python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8503
+
+Local dashboards:
+  Person A: http://127.0.0.1:8501
+  Person B: http://127.0.0.1:8502
+  Person C: http://127.0.0.1:8503
+
+Local APIs and docs:
+  Person A: http://127.0.0.1:8001/docs
+  Person B: http://127.0.0.1:8002/docs
+  Person C: http://127.0.0.1:8003/docs
+
+Cross-machine endpoints use the LAN IP, for example:
+  http://<WINDOWS_A_IP>:8001/health
+  http://<MAC_B_IP>:8002/health
+  http://<MAC_C_IP>:8003/health
+
+
+================================================================================
+14. IMPORTANT LIMITATIONS
+================================================================================
+
+These limitations are intentional and documented in the project READMEs:
+
+- No physical smart plug, vendor API or MQTT broker is implemented.
+- Person C's bundled tariff is illustrative, not an official TNEB tariff.
+- Socket readings may not cover the entire household.
+- No real payment provider is connected; B only records manual payments.
+- No user login; use only on a trusted private network.
+- One actual payment per subscription per billing period in Person B.
+- Headline monetary summaries are INR-only; no FX conversion.
+- No Alembic migrations; recreate the SQLite file if the schema changes.
+- The root integration test suite is for one development machine, not a
+  distributed three-computer deployment.
+
+================================================================================
+END OF GUIDE
+================================================================================

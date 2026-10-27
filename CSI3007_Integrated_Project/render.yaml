@@ -1,0 +1,76 @@
+# Render Blueprint Specification for CSI3007 Integrated Project
+# Deploys individual independent services on Render's Free Tier
+
+services:
+  # Central Integration Gateway
+  - type: web
+    name: csi3007-gateway
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service gateway
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+  # Person A - Sachien N (23MID0255) - Smart Expense Categorization & Budget Management (Claymorphism UI)
+  - type: web
+    name: csi3007-person-a-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service a_api
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CORS_ORIGINS
+        value: "*"
+
+  - type: web
+    name: csi3007-person-a-ui
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service a_ui
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+  # Person B - Shravan N A (23MID0445) - Subscription Renewal & Cost Tracker (Glassmorphism UI)
+  - type: web
+    name: csi3007-person-b-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service b_api
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CORS_ORIGINS
+        value: "*"
+
+  - type: web
+    name: csi3007-person-b-ui
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service b_ui
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+  # Person C - Hariharan S (23MID0182) - Smart Home Electricity Monitoring (Neumorphism UI)
+  - type: web
+    name: csi3007-person-c-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service c_api
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CORS_ORIGINS
+        value: "*"
+
+  - type: web
+    name: csi3007-person-c-ui
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_cloud.py --service c_ui
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

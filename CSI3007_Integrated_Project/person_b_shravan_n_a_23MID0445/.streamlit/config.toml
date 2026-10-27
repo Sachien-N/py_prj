@@ -1,0 +1,15 @@
+# Glassmorphism theme - Person B (Shravan N A, 23MID0445)
+# Indigo gradient + frosted panels; the full glass styling lives in ui/theme.py.
+[theme]
+primaryColor = "#4f46e5"
+backgroundColor = "#eef2ff"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#111827"
+font = "sans serif"
+
+[server]
+headless = true
+runOnSave = true
+
+[browser]
+gatherUsageStats = false

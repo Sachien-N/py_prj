@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Environment files with local secrets (use .env.example templates)
+.env
+!.env.example
+
+# Databases are re-creatable; demonstration DBs ship in data/ folders
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary output
+logs/
+*.log
+export_*.csv

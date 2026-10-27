@@ -1,0 +1,15 @@
+# Claymorphism theme - Person A (Sachien N, 23MID0255)
+# Pastel surfaces + violet accent; the full clay styling lives in ui/theme.py.
+[theme]
+primaryColor = "#7c6ff0"
+backgroundColor = "#eef1fb"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#3b3b58"
+font = "sans serif"
+
+[server]
+headless = true
+runOnSave = true
+
+[browser]
+gatherUsageStats = false
