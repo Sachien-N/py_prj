@@ -1,21 +1,24 @@
-# Render Blueprint Specification for CSI3007 Integrated Project
-# Deploys individual independent services on Render's Free Tier
+```yaml
+# Render Blueprint for CSI3007 Integrated Project
+# Seven independent services
 
 services:
   # Central Integration Gateway
   - type: web
     name: csi3007-gateway
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service gateway
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
 
-  # Person A - Sachien N (23MID0255) - Smart Expense Categorization & Budget Management (Claymorphism UI)
+  # Person A - Sachien N (23MID0255)
   - type: web
     name: csi3007-person-a-api
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service a_api
     envVars:
@@ -27,16 +30,18 @@ services:
   - type: web
     name: csi3007-person-a-ui
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service a_ui
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
 
-  # Person B - Shravan N A (23MID0445) - Subscription Renewal & Cost Tracker (Glassmorphism UI)
+  # Person B - Shravan N A (23MID0445)
   - type: web
     name: csi3007-person-b-api
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service b_api
     envVars:
@@ -48,16 +53,18 @@ services:
   - type: web
     name: csi3007-person-b-ui
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service b_ui
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
 
-  # Person C - Hariharan S (23MID0182) - Smart Home Electricity Monitoring (Neumorphism UI)
+  # Person C - Hariharan S (23MID0182)
   - type: web
     name: csi3007-person-c-api
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service c_api
     envVars:
@@ -69,8 +76,10 @@ services:
   - type: web
     name: csi3007-person-c-ui
     env: python
+    rootDir: CSI3007_Integrated_Project
     buildCommand: pip install -r requirements.txt
     startCommand: python run_cloud.py --service c_ui
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+```
